@@ -4,6 +4,8 @@
 - Michał Barcik 
 - Adam Grelewicz
 - Norbert Luchowski
+#### Tablica Trello:
+- https://trello.com/b/r7wdp3wR
 ### Wybrana technologia:
 - Backend: Python Flask
 - Fronted: JavaScript React
