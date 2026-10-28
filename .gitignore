@@ -65,6 +65,10 @@ db.sqlite3-journal
 # Flask stuff:
 instance/
 .webassets-cache
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
 
 # Scrapy stuff:
 .scrapy
@@ -204,6 +208,12 @@ cython_debug/
 # .vscode/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
+
+# Local environment and temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
 
 # Ruff stuff:
 .ruff_cache/
