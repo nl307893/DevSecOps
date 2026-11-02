@@ -16,19 +16,48 @@
 - `.env` - lokalna konfiguracja i dane poufne (plik ignorowany przez Git)
 - `requirements.txt` - przypięte wersje zależności Pythona
 
-### Uruchomienie backendu:
-```bash
-python -m venv .venv
-```
+### Uruchomienie aplikacji
 
-Windows:
+Aplikację można uruchomić jednym poleceniem. Skrypt automatycznie utworzy
+środowisko `.venv`, zainstaluje zależności i uruchomi backend:
+
 ```powershell
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-flask run
+python run.py
 ```
 
 Backend będzie dostępny pod adresem `http://127.0.0.1:5000`.
+
+### Ręczne uruchomienie krok po kroku
+
+Jeśli nie chcesz korzystać ze skryptu `run.py`, możesz wykonać wszystkie kroki
+ręcznie w PowerShell:
+
+1. Utwórz środowisko wirtualne:
+
+```powershell
+python -m venv .venv
+```
+
+2. Aktywuj środowisko:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Jeśli PowerShell blokuje aktywację skryptów, można pominąć aktywację i używać
+bezpośrednio interpretera `.venv\Scripts\python.exe`.
+
+3. Zainstaluj zależności:
+
+```powershell
+pip install -r requirements.txt
+```
+
+4. Uruchom backend:
+
+```powershell
+flask --app app run
+```
 
 ### Baza danych
 Backend automatycznie tworzy bazę SQLite w `instance/app.sqlite3` przy uruchomieniu
