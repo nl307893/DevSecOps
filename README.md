@@ -30,6 +30,15 @@ flask run
 
 Backend będzie dostępny pod adresem `http://127.0.0.1:5000`.
 
+### Baza danych
+Backend automatycznie tworzy bazę SQLite w `instance/app.sqlite3` przy uruchomieniu
+aplikacji. Schemat zawiera:
+- `users` - konta użytkowników z hashem hasła w kolumnie `password_hash`,
+- `tickets` - zgłoszenia powiązane z użytkownikiem przez `user_id`.
+
+Nie trzeba ręcznie tworzyć tabel. Przy lokalnej konfiguracji skopiuj `.env.example`
+do `.env` i ustaw własny `SECRET_KEY`.
+
 ### Endpoint API:
 - `GET /api/health` - publiczny endpoint sprawdzający stan aplikacji; zwraca `{"status": "ok"}` i kod HTTP 200.
 ### Opis aplikacji:
