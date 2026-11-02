@@ -21,18 +21,20 @@ class DatabaseTestCase(unittest.TestCase):
 
     def test_database_is_created_with_related_tables(self):
         with self.app.app_context():
+            db = get_db()
             tables = {
                 row["name"]
-                for row in get_db().execute(
+                for row in db.execute(
                     "SELECT name FROM sqlite_master "
                     "WHERE type = 'table' AND name IN ('users', 'tickets')"
                 )
             }
-            foreign_keys = get_db().execute(
+            foreign_keys = db.execute(
                 "PRAGMA foreign_key_list(tickets)"
             ).fetchall()
 
         self.assertEqual(tables, {"users", "tickets"})
+        self.assertTrue(foreign_keys, "Tabela tickets powinna mieć klucz obcy")
         self.assertEqual(foreign_keys[0]["table"], "users")
         self.assertEqual(foreign_keys[0]["from"], "user_id")
 
@@ -43,6 +45,7 @@ class DatabaseTestCase(unittest.TestCase):
                 "SELECT password_hash FROM users WHERE id = ?", (user_id,)
             ).fetchone()
 
+        self.assertIsNotNone(row)
         self.assertNotEqual(row["password_hash"], "correct-password")
         self.assertTrue(
             check_password_hash(row["password_hash"], "correct-password")
@@ -50,8 +53,14 @@ class DatabaseTestCase(unittest.TestCase):
 
     def test_ticket_requires_existing_user(self):
         with self.app.app_context():
+            db = get_db()
+            foreign_keys_enabled = db.execute(
+                "PRAGMA foreign_keys"
+            ).fetchone()[0]
+            self.assertEqual(foreign_keys_enabled, 1)
+
             with self.assertRaises(sqlite3.IntegrityError):
-                get_db().execute(
+                db.execute(
                     "INSERT INTO tickets "
                     "(user_id, title, description, category, priority) "
                     "VALUES (?, ?, ?, ?, ?)",
