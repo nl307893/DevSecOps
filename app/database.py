@@ -1,12 +1,11 @@
-from typing import Any
-
 from alembic import command
 from alembic.config import Config
 from flask import current_app, g
-import psycopg
-from psycopg.rows import dict_row
 from sqlalchemy import create_engine
-from werkzeug.security import generate_password_hash
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.auth.password import hash_password
+from app.models import User, UserRole
 
 
 def _sqlalchemy_url(database_url: str) -> str:
@@ -15,19 +14,27 @@ def _sqlalchemy_url(database_url: str) -> str:
     return database_url
 
 
-def get_db() -> psycopg.Connection[dict[str, Any]]:
-    if "db" not in g:
-        g.db = psycopg.connect(
-            current_app.config["DATABASE_URL"],
-            row_factory=dict_row,
+def get_db() -> Session:
+    return get_session()
+
+
+def get_session() -> Session:
+    if "db_session" not in g:
+        engine = create_engine(
+            _sqlalchemy_url(current_app.config["DATABASE_URL"])
         )
-    return g.db
+        g.db_engine = engine
+        g.db_session = sessionmaker(bind=engine, expire_on_commit=False)()
+    return g.db_session
 
 
 def close_db(_error: BaseException | None = None) -> None:
-    db = g.pop("db", None)
-    if db is not None:
-        db.close()
+    session = g.pop("db_session", None)
+    if session is not None:
+        session.close()
+    engine = g.pop("db_engine", None)
+    if engine is not None:
+        engine.dispose()
 
 
 def init_db() -> None:
@@ -45,13 +52,15 @@ def init_db() -> None:
 
 
 def create_user(email: str, password: str) -> int:
-    db = get_db()
-    cursor = db.execute(
-        "INSERT INTO users (email, password_hash) VALUES (%s, %s) RETURNING id",
-        (email, generate_password_hash(password)),
+    user = User(
+        email=email,
+        password_hash=hash_password(password),
+        role=UserRole.CLIENT,
     )
-    db.commit()
-    return cursor.fetchone()["id"]
+    session = get_session()
+    session.add(user)
+    session.commit()
+    return user.id
 
 
 def init_app(app) -> None:

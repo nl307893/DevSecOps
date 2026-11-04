@@ -15,6 +15,8 @@ def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_mapping(
         SECRET_KEY=os.getenv("SECRET_KEY", "change-me-in-development"),
+        JWT_ACCESS_MINUTES=int(os.getenv("JWT_ACCESS_MINUTES", "15")),
+        JWT_REFRESH_DAYS=int(os.getenv("JWT_REFRESH_DAYS", "30")),
         INIT_DB=True,
         DATABASE_URL=os.getenv("DATABASE_URL"),
         ALEMBIC_CONFIG=str(Path(__file__).resolve().parent.parent / "alembic.ini"),

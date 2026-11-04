@@ -12,6 +12,8 @@
 ### Struktura projektu:
 - `app/` - kod aplikacji Flask
 - `app/api/` - endpointy API
+- `app/models/` - modele SQLAlchemy ORM
+- `app/auth/` - JWT, hashowanie haseł i autoryzacja ról
 - `db/migrations/` - wersjonowane migracje bazy danych Alembic
 - `tests/` - testy aplikacji
 - `.env` - lokalna konfiguracja i dane poufne (plik ignorowany przez Git)
@@ -35,6 +37,18 @@ python run.py
 `docker compose up -d --wait db` uruchamia bazę PostgreSQL, czeka na jej gotowość i zapisuje dane w trwałym wolumenie `postgres_data`.
 `python run.py` instaluje zależności, uruchamia migracje Alembic do wersji `head` i uruchamia backend pod adresem `http://127.0.0.1:5000`.
 
+### Uwierzytelnianie
+
+API używa krótkotrwałego JWT access tokena oraz refresh tokena zapisywanego
+w bazie jako hash. Dostępne endpointy:
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+
+Chronione endpointy mogą używać `@login_required` albo
+`@roles_required("technician")` z `app.auth.decorators`.
 ### Migracje bazy danych
 
 Migracje są przechowywane w `db/migrations/versions/`. Po dodaniu nowej migracji uruchom:
