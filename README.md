@@ -12,61 +12,53 @@
 ### Struktura projektu:
 - `app/` - kod aplikacji Flask
 - `app/api/` - endpointy API
+- `db/migrations/` - wersjonowane migracje bazy danych Alembic
 - `tests/` - testy aplikacji
 - `.env` - lokalna konfiguracja i dane poufne (plik ignorowany przez Git)
 - `requirements.txt` - przypięte wersje zależności Pythona
 
-### Uruchomienie aplikacji
+### Uruchomienie backendu:
+Baza PostgreSQL uruchamia się w Dockerze. Skopiuj `.env.example` do `.env` i ustaw własne `POSTGRES_PASSWORD`. `DATABASE_URL` powinien wskazywać ten sam port, użytkownika, hasło i bazę.
 
-Aplikację można uruchomić jednym poleceniem. Skrypt automatycznie utworzy
-środowisko `.venv`, zainstaluje zależności i uruchomi backend:
-
-```powershell
-python run.py
-```
-
-Backend będzie dostępny pod adresem `http://127.0.0.1:5000`.
-
-### Ręczne uruchomienie krok po kroku
-
-Jeśli nie chcesz korzystać ze skryptu `run.py`, możesz wykonać wszystkie kroki
-ręcznie w PowerShell:
-
-1. Utwórz środowisko wirtualne:
-
-```powershell
+```bash
 python -m venv .venv
 ```
 
-2. Aktywuj środowisko:
-
+Windows:
 ```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-Jeśli PowerShell blokuje aktywację skryptów, można pominąć aktywację i używać
-bezpośrednio interpretera `.venv\Scripts\python.exe`.
-
-3. Zainstaluj zależności:
-
-```powershell
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+docker compose up -d --wait db
+python run.py
 ```
 
-4. Uruchom backend:
+`docker compose up -d --wait db` uruchamia bazę PostgreSQL, czeka na jej gotowość i zapisuje dane w trwałym wolumenie `postgres_data`.
+`python run.py` instaluje zależności, uruchamia migracje Alembic do wersji `head` i uruchamia backend pod adresem `http://127.0.0.1:5000`.
 
+### Migracje bazy danych
+
+Migracje są przechowywane w `db/migrations/versions/`. Po dodaniu nowej migracji uruchom:
 ```powershell
-flask --app app run
+.venv\Scripts\python.exe -m db.migrate
 ```
 
-### Baza danych
-Backend automatycznie tworzy bazę SQLite w `instance/app.sqlite3` przy uruchomieniu
-aplikacji. Schemat zawiera:
-- `users` - konta użytkowników z hashem hasła w kolumnie `password_hash`,
-- `tickets` - zgłoszenia powiązane z użytkownikiem przez `user_id`.
+W aplikacji migracje są wykonywane automatycznie przy starcie, więc standardowy `python run.py` nadal wystarcza.
 
-Nie trzeba ręcznie tworzyć tabel. Przy lokalnej konfiguracji skopiuj `.env.example`
-do `.env` i ustaw własny `SECRET_KEY`.
+Zatrzymanie bazy:
+```powershell
+docker compose down
+```
+
+Usunięcie bazy wraz z danymi:
+```powershell
+docker compose down -v
+```
+
+Testy PostgreSQL wymagają ustawienia `TEST_DATABASE_URL` i uruchamiają się poleceniem:
+```powershell
+$env:TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/devsecops_test"
+python -m unittest discover -s tests -p "test_*.py"
+```
 
 ### Endpoint API:
 - `GET /api/health` - publiczny endpoint sprawdzający stan aplikacji; zwraca `{"status": "ok"}` i kod HTTP 200.

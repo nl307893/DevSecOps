@@ -5,7 +5,9 @@ from app import create_app
 
 class HealthEndpointTestCase(unittest.TestCase):
     def setUp(self):
-        self.client = create_app().test_client()
+        self.client = create_app(
+            {"TESTING": True, "INIT_DB": False}
+        ).test_client()
 
     def test_health_returns_application_status_without_login(self):
         response = self.client.get("/api/health")
