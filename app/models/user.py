@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, String, func
+from sqlalchemy import CheckConstraint, DateTime, Enum, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -16,6 +16,16 @@ if TYPE_CHECKING:
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            r"email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'",
+            name="users_email_format_check",
+        ),
+        CheckConstraint(
+            "length(btrim(password_hash)) > 0",
+            name="users_password_hash_not_empty_check",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)

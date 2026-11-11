@@ -1,5 +1,5 @@
 from .comment import Comment
-from .enums import TicketStatus, UserRole
+from .enums import TicketCategory, TicketStatus, UserRole
 from .refresh_token import RefreshToken
 from .ticket import Ticket
 from .ticket_history import TicketHistory
@@ -9,6 +9,7 @@ __all__ = [
     "Comment",
     "RefreshToken",
     "Ticket",
+    "TicketCategory",
     "TicketHistory",
     "TicketStatus",
     "User",

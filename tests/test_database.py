@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app import create_app
 from app.database import create_user, get_db
-from app.models import Ticket, User
+from app.models import Ticket, TicketCategory, User
 
 
 class DatabaseTestCase(unittest.TestCase):
@@ -81,7 +81,35 @@ class DatabaseTestCase(unittest.TestCase):
                         client_id=999,
                         title="Title",
                         description="Description",
-                        category="Hardware",
+                        category=TicketCategory.HARDWARE,
+                        priority="high",
+                    )
+                )
+                db.flush()
+
+    def test_database_rejects_invalid_email(self):
+        with self.app.app_context():
+            db = get_db()
+            with self.assertRaises(IntegrityError):
+                db.add(
+                    User(
+                        email="not-an-email",
+                        password_hash="hashed-password",
+                    )
+                )
+                db.flush()
+
+    def test_database_rejects_empty_ticket_fields(self):
+        with self.app.app_context():
+            db = get_db()
+            user_id = create_user("valid@example.com", "correct-password")
+            with self.assertRaises(IntegrityError):
+                db.add(
+                    Ticket(
+                        client_id=user_id,
+                        title=" ",
+                        description="Description",
+                        category=TicketCategory.HARDWARE,
                         priority="high",
                     )
                 )
