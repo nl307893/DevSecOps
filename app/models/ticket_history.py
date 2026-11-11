@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Uuid, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 from .enums import TicketStatus
+
+if TYPE_CHECKING:
+    from .user import User
 
 
 class TicketHistory(Base):
@@ -39,6 +43,7 @@ class TicketHistory(Base):
     changed_by: Mapped[UUID] = mapped_column(
         ForeignKey("users.id"), nullable=False
     )
+    changed_by_user: Mapped["User"] = relationship()
     changed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.current_timestamp()
     )

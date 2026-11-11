@@ -14,10 +14,11 @@ from app.models import (
     User,
     UserRole,
 )
-from .ticket_helpers import (
+from ..ticket_helpers import (
     current_user_id,
     serialize_comment,
     serialize_ticket,
+    user_display_name,
     validate_comment_content,
 )
 
@@ -84,6 +85,38 @@ def get_ticket(ticket_id: UUID):
     if ticket is None:
         return jsonify(error="Resource not found"), 404
     return jsonify(serialize_ticket(ticket, include_priority=True))
+
+
+@technician_tickets_bp.get("/<uuid:ticket_id>/history")
+@roles_required("technician")
+def get_ticket_history(ticket_id: UUID):
+    ticket = _get_ticket(ticket_id)
+    if ticket is None:
+        return jsonify(error="Resource not found"), 404
+
+    history = get_session().scalars(
+        select(TicketHistory)
+        .where(TicketHistory.ticket_id == ticket.id)
+        .order_by(TicketHistory.changed_at.desc())
+    ).all()
+    return jsonify(
+        [
+            {
+                "id": str(entry.id),
+                "old_status": (
+                    entry.old_status.value if entry.old_status else None
+                ),
+                "new_status": entry.new_status.value,
+                "changed_by": user_display_name(entry.changed_by_user),
+                "changed_at": (
+                    entry.changed_at.isoformat()
+                    if entry.changed_at
+                    else None
+                ),
+            }
+            for entry in history
+        ]
+    )
 
 
 @technician_tickets_bp.patch("/<uuid:ticket_id>/priority")
