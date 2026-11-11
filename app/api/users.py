@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from flask import Blueprint, g, jsonify
 from sqlalchemy import select
 
@@ -13,8 +15,8 @@ users_bp = Blueprint("users", __name__)
 @login_required
 def me():
     user = get_session().scalar(
-        select(User).where(User.id == int(g.current_user["sub"]))
+        select(User).where(User.id == UUID(g.current_user["sub"]))
     )
     if user is None:
         return jsonify(error="User not found"), 404
-    return jsonify(id=user.id, email=user.email, role=user.role.value)
+    return jsonify(id=str(user.id), email=user.email, role=user.role.value)

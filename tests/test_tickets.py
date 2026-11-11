@@ -89,7 +89,7 @@ class TicketEndpointTestCase(unittest.TestCase):
         self.assertEqual(listed, [])
 
         response = self.client.get(f"/api/tickets/{ticket_id}", headers=headers_b)
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
 
     def test_ticket_not_found(self):
         headers = self._register()

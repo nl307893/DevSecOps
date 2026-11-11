@@ -29,7 +29,7 @@ def roles_required(*roles: str) -> Callable:
         @login_required
         def wrapped(*args, **kwargs):
             if g.current_user["role"] not in roles:
-                return jsonify(error="Insufficient permissions"), 403
+                return jsonify(error="Resource not found"), 404
             return view(*args, **kwargs)
 
         return wrapped
