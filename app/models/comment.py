@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Text, Uuid, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -16,6 +16,12 @@ if TYPE_CHECKING:
 
 class Comment(Base):
     __tablename__ = "comments"
+    __table_args__ = (
+        CheckConstraint(
+            "length(btrim(content)) > 0",
+            name="comments_content_not_empty_check",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid4
@@ -32,3 +38,4 @@ class Comment(Base):
     )
 
     ticket: Mapped["Ticket"] = relationship(back_populates="comments")
+    author: Mapped["User"] = relationship()

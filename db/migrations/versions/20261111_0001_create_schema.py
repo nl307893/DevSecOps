@@ -26,12 +26,18 @@ def upgrade() -> None:
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             email TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
+            first_name TEXT,
+            last_name TEXT,
             role user_role NOT NULL DEFAULT 'client',
             created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
             CONSTRAINT users_email_format_check
                 CHECK (email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
             CONSTRAINT users_password_hash_not_empty_check
-                CHECK (length(btrim(password_hash)) > 0)
+                CHECK (length(btrim(password_hash)) > 0),
+            CONSTRAINT users_first_name_not_empty_check
+                CHECK (first_name IS NULL OR length(btrim(first_name)) > 0),
+            CONSTRAINT users_last_name_not_empty_check
+                CHECK (last_name IS NULL OR length(btrim(last_name)) > 0)
         )
         """
     )
@@ -63,7 +69,9 @@ def upgrade() -> None:
             ticket_id UUID NOT NULL REFERENCES tickets (id) ON DELETE CASCADE,
             author_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
             content TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT comments_content_not_empty_check
+                CHECK (length(btrim(content)) > 0)
         )
         """
     )

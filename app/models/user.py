@@ -26,6 +26,14 @@ class User(Base):
             "length(btrim(password_hash)) > 0",
             name="users_password_hash_not_empty_check",
         ),
+        CheckConstraint(
+            "first_name IS NULL OR length(btrim(first_name)) > 0",
+            name="users_first_name_not_empty_check",
+        ),
+        CheckConstraint(
+            "last_name IS NULL OR length(btrim(last_name)) > 0",
+            name="users_last_name_not_empty_check",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -33,6 +41,8 @@ class User(Base):
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    first_name: Mapped[str | None] = mapped_column(String(100))
+    last_name: Mapped[str | None] = mapped_column(String(100))
     role: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole,

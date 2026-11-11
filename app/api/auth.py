@@ -22,12 +22,22 @@ def register():
     data = request.get_json(silent=True) or {}
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
+    first_name = data.get("first_name")
+    last_name = data.get("last_name")
+    first_name = first_name.strip() if isinstance(first_name, str) else None
+    last_name = last_name.strip() if isinstance(last_name, str) else None
     if not email or not password:
         return jsonify(error="email and password are required"), 400
+    if (first_name and len(first_name) > 100) or (
+        last_name and len(last_name) > 100
+    ):
+        return jsonify(error="first name or last name too long"), 400
 
     user = User(
         email=email,
         password_hash=hash_password(password),
+        first_name=first_name,
+        last_name=last_name,
         role=UserRole.CLIENT,
     )
     session = get_session()
