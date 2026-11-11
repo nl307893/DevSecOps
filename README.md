@@ -37,6 +37,19 @@ python run.py
 `docker compose up -d --wait db` uruchamia bazę PostgreSQL, czeka na jej gotowość i zapisuje dane w trwałym wolumenie `postgres_data`.
 `python run.py` instaluje zależności, uruchamia migracje Alembic do wersji `head` i uruchamia backend pod adresem `http://127.0.0.1:5000`.
 
+### Dane demonstracyjne
+
+Dane demonstracyjne są tworzone osobnym skryptem, a nie podczas migracji.
+Ustaw w lokalnym `.env` dane `SEED_CLIENT_*` i `SEED_TECHNICIAN_*`, a następnie
+jawnie włącz seedowanie:
+
+```powershell
+$env:SEED_DEMO_DATA="1"
+.venv\Scripts\python.exe -m db.seed
+```
+
+Skrypt jest idempotentny i nie nadpisuje istniejących użytkowników.
+
 ### Uwierzytelnianie
 
 API używa krótkotrwałego JWT access tokena oraz refresh tokena zapisywanego

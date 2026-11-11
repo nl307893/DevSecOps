@@ -6,23 +6,28 @@ from sqlalchemy import select
 from app.auth.decorators import login_required
 from app.database import get_session
 from app.models import Comment, Ticket, TicketCategory, TicketStatus
-from .ticket_helpers import current_user_id, serialize_ticket, user_display_name
+from ..ticket_helpers import (
+    current_user_id,
+    serialize_comment,
+    serialize_ticket,
+    validate_comment_content,
+)
 
 
 tickets_bp = Blueprint("tickets", __name__)
 
 ALLOWED_PRIORITIES = {"low", "medium", "high"}
 ALLOWED_CATEGORIES = {category.value for category in TicketCategory}
-MAX_COMMENT_LENGTH = 5000
 
 
-def _get_owned_ticket(ticket_id: UUID) -> Ticket | None:
-    return get_session().scalar(
-        select(Ticket).where(
+def _get_owned_ticket(ticket_id: UUID, lock: bool = False) -> Ticket | None:
+    query = select(Ticket).where(
             Ticket.id == ticket_id,
             Ticket.client_id == current_user_id(),
         )
-    )
+    if lock:
+        query = query.with_for_update()
+    return get_session().scalar(query)
 
 
 def _ticket_data(data: dict, partial: bool = False) -> tuple[dict, str | None]:
@@ -41,10 +46,11 @@ def _ticket_data(data: dict, partial: bool = False) -> tuple[dict, str | None]:
         }
     if any(not isinstance(value, str) for value in values.values()):
         return {}, "ticket fields must be strings"
-    values = {
-        field: value.strip().lower()
-        for field, value in values.items()
-    }
+    values = {field: value.strip() for field, value in values.items()}
+    if "category" in values:
+        values["category"] = values["category"].lower()
+    if "priority" in values:
+        values["priority"] = values["priority"].lower()
     if not partial and (
         not values["title"] or not values["description"] or not values["category"]
     ):
@@ -111,10 +117,10 @@ def get_ticket(ticket_id: UUID):
 @tickets_bp.patch("/<uuid:ticket_id>")
 @login_required
 def update_ticket(ticket_id: UUID):
-    ticket = _get_owned_ticket(ticket_id)
+    ticket = _get_owned_ticket(ticket_id, lock=True)
     if ticket is None:
         return jsonify(error="Resource not found"), 404
-    if ticket.status != TicketStatus.NEW:
+    if ticket.status != TicketStatus.NEW or ticket.technician_id is not None:
         return jsonify(error="Ticket cannot be changed in this status"), 409
 
     data = request.get_json(silent=True) or {}
@@ -133,10 +139,10 @@ def update_ticket(ticket_id: UUID):
 @tickets_bp.delete("/<uuid:ticket_id>")
 @login_required
 def delete_ticket(ticket_id: UUID):
-    ticket = _get_owned_ticket(ticket_id)
+    ticket = _get_owned_ticket(ticket_id, lock=True)
     if ticket is None:
         return jsonify(error="Resource not found"), 404
-    if ticket.status != TicketStatus.NEW:
+    if ticket.status != TicketStatus.NEW or ticket.technician_id is not None:
         return jsonify(error="Ticket cannot be deleted in this status"), 409
 
     session = get_session()
@@ -148,23 +154,22 @@ def delete_ticket(ticket_id: UUID):
 @tickets_bp.post("/<uuid:ticket_id>/comments")
 @login_required
 def add_comment(ticket_id: UUID):
-    ticket = _get_owned_ticket(ticket_id)
+    ticket = _get_owned_ticket(ticket_id, lock=True)
     if ticket is None:
         return jsonify(error="Resource not found"), 404
-    if ticket.status in {TicketStatus.RESOLVED, TicketStatus.CANCELLED}:
+    if ticket.status in {
+        TicketStatus.RESOLVED,
+        TicketStatus.CANCELLED,
+        TicketStatus.ARCHIVED,
+    }:
         return jsonify(error="Comments are disabled for this ticket"), 409
 
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
         return jsonify(error="request body must be an object"), 400
-    content = data.get("content")
-    if not isinstance(content, str):
-        return jsonify(error="content is required"), 400
-    content = content.strip()
-    if not content:
-        return jsonify(error="content cannot be empty"), 400
-    if len(content) > MAX_COMMENT_LENGTH:
-        return jsonify(error="content too long"), 400
+    content, error = validate_comment_content(data.get("content"))
+    if error or content is None:
+        return jsonify(error=error), 400
 
     comment = Comment(
         ticket_id=ticket.id,
@@ -175,11 +180,18 @@ def add_comment(ticket_id: UUID):
     session.add(comment)
     session.commit()
     session.refresh(comment)
-    return jsonify(
-        id=str(comment.id),
-        content=comment.content,
-        author_name=user_display_name(comment.author),
-        created_at=(
-            comment.created_at.isoformat() if comment.created_at else None
-        ),
-    ), 201
+    return jsonify(serialize_comment(comment)), 201
+
+
+@tickets_bp.get("/<uuid:ticket_id>/comments")
+@login_required
+def list_comments(ticket_id: UUID):
+    ticket = _get_owned_ticket(ticket_id)
+    if ticket is None:
+        return jsonify(error="Resource not found"), 404
+    comments = get_session().scalars(
+        select(Comment)
+        .where(Comment.ticket_id == ticket.id)
+        .order_by(Comment.created_at.asc())
+    ).all()
+    return jsonify([serialize_comment(comment) for comment in comments])

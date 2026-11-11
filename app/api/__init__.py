@@ -2,9 +2,8 @@ from flask import Blueprint
 
 from .health import health_bp
 from .auth import auth_bp
-from .tickets import tickets_bp
+from .Client import tickets_bp, users_bp
 from .technician_tickets import technician_tickets_bp
-from .users import users_bp
 
 
 api_bp = Blueprint("api", __name__)

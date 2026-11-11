@@ -1,3 +1,5 @@
+import re
+
 from flask import Blueprint, jsonify, request
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -15,19 +17,28 @@ from app.models import User, UserRole
 
 
 auth_bp = Blueprint("auth", __name__)
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+MIN_PASSWORD_LENGTH = 8
 
 
 @auth_bp.post("/register")
 def register():
     data = request.get_json(silent=True) or {}
-    email = data.get("email", "").strip().lower()
+    if not isinstance(data, dict):
+        return jsonify(error="request body must be an object"), 400
+    email = data.get("email")
     password = data.get("password", "")
     first_name = data.get("first_name")
     last_name = data.get("last_name")
     first_name = first_name.strip() if isinstance(first_name, str) else None
     last_name = last_name.strip() if isinstance(last_name, str) else None
-    if not email or not password:
-        return jsonify(error="email and password are required"), 400
+    if not isinstance(email, str) or not EMAIL_PATTERN.fullmatch(email.strip()):
+        return jsonify(error="invalid email"), 400
+    email = email.strip().lower()
+    if not isinstance(password, str) or len(password) < MIN_PASSWORD_LENGTH:
+        return jsonify(
+            error=f"password must be at least {MIN_PASSWORD_LENGTH} characters"
+        ), 400
     if (first_name and len(first_name) > 100) or (
         last_name and len(last_name) > 100
     ):

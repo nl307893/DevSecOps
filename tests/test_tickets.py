@@ -95,3 +95,37 @@ class TicketEndpointTestCase(unittest.TestCase):
         headers = self._register()
         response = self.client.get("/api/tickets/999999999", headers=headers)
         self.assertEqual(response.status_code, 404)
+
+    def test_client_can_update_comment_and_delete_new_ticket(self):
+        headers = self._register()
+        response = self.client.post(
+            "/api/tickets", json=self._payload(), headers=headers
+        )
+        self.assertEqual(response.status_code, 201)
+        ticket_id = response.get_json()["id"]
+
+        response = self.client.patch(
+            f"/api/tickets/{ticket_id}",
+            json={"title": "Zmieniony tytul"},
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["title"], "Zmieniony tytul")
+
+        response = self.client.post(
+            f"/api/tickets/{ticket_id}/comments",
+            json={"content": "Komentarz klienta"},
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.get(
+            f"/api/tickets/{ticket_id}/comments", headers=headers
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()[0]["content"], "Komentarz klienta")
+
+        response = self.client.delete(
+            f"/api/tickets/{ticket_id}", headers=headers
+        )
+        self.assertEqual(response.status_code, 204)

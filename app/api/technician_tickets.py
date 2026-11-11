@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.auth.decorators import roles_required
 from app.database import get_session
 from app.models import (
+    Comment,
     Ticket,
     TicketCategory,
     TicketHistory,
@@ -13,15 +14,23 @@ from app.models import (
     User,
     UserRole,
 )
-from .ticket_helpers import current_user_id, serialize_ticket
+from .ticket_helpers import (
+    current_user_id,
+    serialize_comment,
+    serialize_ticket,
+    validate_comment_content,
+)
 
 
 technician_tickets_bp = Blueprint("technician_tickets", __name__)
 ALLOWED_PRIORITIES = {"low", "medium", "high"}
 
 
-def _get_ticket(ticket_id: UUID) -> Ticket | None:
-    return get_session().get(Ticket, ticket_id)
+def _get_ticket(ticket_id: UUID, lock: bool = False) -> Ticket | None:
+    query = select(Ticket).where(Ticket.id == ticket_id)
+    if lock:
+        query = query.with_for_update()
+    return get_session().scalar(query)
 
 
 def _json_object() -> dict | None:
@@ -55,6 +64,19 @@ def list_tickets():
     )
 
 
+@technician_tickets_bp.get("/assigned")
+@roles_required("technician")
+def list_assigned_tickets():
+    tickets = get_session().scalars(
+        select(Ticket)
+        .where(Ticket.technician_id == current_user_id())
+        .order_by(Ticket.created_at.desc())
+    ).all()
+    return jsonify(
+        [serialize_ticket(ticket, include_priority=True) for ticket in tickets]
+    )
+
+
 @technician_tickets_bp.get("/<uuid:ticket_id>")
 @roles_required("technician")
 def get_ticket(ticket_id: UUID):
@@ -67,7 +89,7 @@ def get_ticket(ticket_id: UUID):
 @technician_tickets_bp.patch("/<uuid:ticket_id>/priority")
 @roles_required("technician")
 def update_priority(ticket_id: UUID):
-    ticket = _get_ticket(ticket_id)
+    ticket = _get_ticket(ticket_id, lock=True)
     if ticket is None:
         return jsonify(error="Resource not found"), 404
     data = _json_object()
@@ -87,7 +109,7 @@ def update_priority(ticket_id: UUID):
 @technician_tickets_bp.patch("/<uuid:ticket_id>/assign")
 @roles_required("technician")
 def assign_technician(ticket_id: UUID):
-    ticket = _get_ticket(ticket_id)
+    ticket = _get_ticket(ticket_id, lock=True)
     if ticket is None:
         return jsonify(error="Resource not found"), 404
     data = _json_object()
@@ -104,6 +126,11 @@ def assign_technician(ticket_id: UUID):
         technician = get_session().get(User, technician_id)
         if technician is None or technician.role != UserRole.TECHNICIAN:
             return jsonify(error="Resource not found"), 404
+        if (
+            ticket.technician_id is not None
+            and ticket.technician_id != technician_id
+        ):
+            return jsonify(error="Ticket is already assigned"), 409
         ticket.technician_id = technician_id
         old_status = ticket.status
         if technician_id == current_user_id():
@@ -120,7 +147,7 @@ def assign_technician(ticket_id: UUID):
 @technician_tickets_bp.patch("/<uuid:ticket_id>/status")
 @roles_required("technician")
 def update_status(ticket_id: UUID):
-    ticket = _get_ticket(ticket_id)
+    ticket = _get_ticket(ticket_id, lock=True)
     if ticket is None:
         return jsonify(error="Resource not found"), 404
     data = _json_object()
@@ -145,7 +172,7 @@ def update_status(ticket_id: UUID):
 @technician_tickets_bp.patch("/<uuid:ticket_id>/category")
 @roles_required("technician")
 def update_category(ticket_id: UUID):
-    ticket = _get_ticket(ticket_id)
+    ticket = _get_ticket(ticket_id, lock=True)
     if ticket is None:
         return jsonify(error="Resource not found"), 404
     data = _json_object()
@@ -162,3 +189,62 @@ def update_category(ticket_id: UUID):
     get_session().commit()
     get_session().refresh(ticket)
     return jsonify(serialize_ticket(ticket, include_priority=True))
+
+
+@technician_tickets_bp.patch("/<uuid:ticket_id>/archive")
+@roles_required("technician")
+def archive_ticket(ticket_id: UUID):
+    ticket = _get_ticket(ticket_id, lock=True)
+    if ticket is None:
+        return jsonify(error="Resource not found"), 404
+    old_status = ticket.status
+    ticket.status = TicketStatus.ARCHIVED
+    _record_status_change(ticket, old_status)
+    get_session().commit()
+    get_session().refresh(ticket)
+    return jsonify(serialize_ticket(ticket, include_priority=True))
+
+
+@technician_tickets_bp.post("/<uuid:ticket_id>/comments")
+@roles_required("technician")
+def add_comment(ticket_id: UUID):
+    ticket = _get_ticket(ticket_id, lock=True)
+    if ticket is None:
+        return jsonify(error="Resource not found"), 404
+    if ticket.status in {
+        TicketStatus.RESOLVED,
+        TicketStatus.CANCELLED,
+        TicketStatus.ARCHIVED,
+    }:
+        return jsonify(error="Comments are disabled for this ticket"), 409
+    data = _json_object()
+    if data is None:
+        return jsonify(error="request body must be an object"), 400
+    content, error = validate_comment_content(data.get("content"))
+    if error or content is None:
+        return jsonify(error=error), 400
+
+    comment = Comment(
+        ticket_id=ticket.id,
+        author_id=current_user_id(),
+        content=content,
+    )
+    session = get_session()
+    session.add(comment)
+    session.commit()
+    session.refresh(comment)
+    return jsonify(serialize_comment(comment)), 201
+
+
+@technician_tickets_bp.get("/<uuid:ticket_id>/comments")
+@roles_required("technician")
+def list_comments(ticket_id: UUID):
+    ticket = _get_ticket(ticket_id)
+    if ticket is None:
+        return jsonify(error="Resource not found"), 404
+    comments = get_session().scalars(
+        select(Comment)
+        .where(Comment.ticket_id == ticket.id)
+        .order_by(Comment.created_at.asc())
+    ).all()
+    return jsonify([serialize_comment(comment) for comment in comments])

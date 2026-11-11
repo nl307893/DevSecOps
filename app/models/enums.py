@@ -11,6 +11,7 @@ class TicketStatus(StrEnum):
     RESOLVED = "resolved"
     INSTATUS = "instatus"
     CANCELLED = "cancelled"
+    ARCHIVED = "archived"
 
 
 class TicketCategory(StrEnum):

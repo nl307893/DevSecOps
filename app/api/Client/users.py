@@ -8,7 +8,7 @@ from app.auth.decorators import login_required
 from app.auth.password import hash_password, verify_password
 from app.database import get_session
 from app.models import User
-from .ticket_helpers import current_user_id, user_display_name
+from ..ticket_helpers import current_user_id, user_display_name
 
 
 users_bp = Blueprint("users", __name__)

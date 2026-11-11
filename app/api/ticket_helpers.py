@@ -2,7 +2,7 @@ from uuid import UUID
 
 from flask import g
 
-from app.models import Ticket
+from app.models import Comment, Ticket
 
 
 def current_user_id() -> UUID:
@@ -34,3 +34,25 @@ def serialize_ticket(ticket: Ticket, include_priority: bool = False) -> dict:
     if include_priority:
         serialized["priority"] = ticket.priority
     return serialized
+
+
+def serialize_comment(comment: Comment) -> dict:
+    return {
+        "id": str(comment.id),
+        "content": comment.content,
+        "author_name": user_display_name(comment.author),
+        "created_at": (
+            comment.created_at.isoformat() if comment.created_at else None
+        ),
+    }
+
+
+def validate_comment_content(content: object) -> tuple[str | None, str | None]:
+    if not isinstance(content, str):
+        return None, "content is required"
+    content = content.strip()
+    if not content:
+        return None, "content cannot be empty"
+    if len(content) > 5000:
+        return None, "content too long"
+    return content, None

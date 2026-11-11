@@ -57,3 +57,22 @@ class AuthEndpointTestCase(unittest.TestCase):
             json={"refresh_token": refreshed_tokens["refresh_token"]},
         )
         self.assertEqual(response.status_code, 204)
+
+    def test_register_and_login_validate_credentials(self):
+        response = self.client.post(
+            "/api/auth/register",
+            json={"email": "invalid-email", "password": "correct-password"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.post(
+            "/api/auth/register",
+            json={"email": self.email, "password": "short"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.post(
+            "/api/auth/login",
+            json={"email": self.email, "password": "wrong-password"},
+        )
+        self.assertEqual(response.status_code, 401)

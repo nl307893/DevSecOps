@@ -14,7 +14,7 @@ def upgrade() -> None:
     op.execute("CREATE TYPE user_role AS ENUM ('client', 'technician')")
     op.execute(
         "CREATE TYPE ticket_status AS ENUM "
-        "('new', 'resolved', 'instatus', 'cancelled')"
+        "('new', 'resolved', 'instatus', 'cancelled', 'archived')"
     )
     op.execute(
         "CREATE TYPE ticket_category AS ENUM "
