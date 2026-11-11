@@ -2,8 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
+from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
+    Text,
+    Uuid,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -31,7 +41,9 @@ class Ticket(Base):
         ),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[TicketCategory] = mapped_column(
@@ -54,10 +66,10 @@ class Ticket(Base):
         nullable=False,
         default=TicketStatus.NEW,
     )
-    client_id: Mapped[int] = mapped_column(
+    client_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    technician_id: Mapped[int | None] = mapped_column(
+    technician_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
     created_at: Mapped[datetime] = mapped_column(

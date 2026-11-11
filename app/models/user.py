@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
+from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, String, func
+from sqlalchemy import CheckConstraint, DateTime, Enum, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -27,7 +28,9 @@ class User(Base):
         ),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(

@@ -1,5 +1,6 @@
 import os
 import unittest
+from uuid import uuid4
 
 import bcrypt
 from sqlalchemy import text
@@ -27,7 +28,7 @@ class DatabaseTestCase(unittest.TestCase):
                 "alembic_version CASCADE"
             ))
             get_db().execute(text(
-                "DROP TYPE IF EXISTS ticket_status, user_role CASCADE"
+                "                DROP TYPE IF EXISTS ticket_category, ticket_status, user_role CASCADE"
             ))
             get_db().commit()
 
@@ -78,7 +79,7 @@ class DatabaseTestCase(unittest.TestCase):
             with self.assertRaises(IntegrityError):
                 db.add(
                     Ticket(
-                        client_id=999,
+                        client_id=uuid4(),
                         title="Title",
                         description="Description",
                         category=TicketCategory.HARDWARE,

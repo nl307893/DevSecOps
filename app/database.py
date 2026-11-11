@@ -3,6 +3,7 @@ from alembic.config import Config
 from flask import current_app, g
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from uuid import UUID
 
 from app.auth.password import hash_password
 from app.models import User, UserRole
@@ -51,7 +52,7 @@ def init_db() -> None:
         engine.dispose()
 
 
-def create_user(email: str, password: str) -> int:
+def create_user(email: str, password: str) -> UUID:
     user = User(
         email=email,
         password_hash=hash_password(password),

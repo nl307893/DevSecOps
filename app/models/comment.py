@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
+from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Text, func
+from sqlalchemy import DateTime, ForeignKey, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -16,11 +17,13 @@ if TYPE_CHECKING:
 class Comment(Base):
     __tablename__ = "comments"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    ticket_id: Mapped[int] = mapped_column(
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
+    ticket_id: Mapped[UUID] = mapped_column(
         ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False
     )
-    author_id: Mapped[int] = mapped_column(
+    author_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)

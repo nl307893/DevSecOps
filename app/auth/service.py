@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 import jwt
 from flask import current_app
@@ -13,7 +14,7 @@ from app.models import RefreshToken, User
 from .password import hash_password, verify_password
 
 
-def create_access_token(user_id: int, role: str) -> str:
+def create_access_token(user_id: UUID, role: str) -> str:
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(
         minutes=current_app.config["JWT_ACCESS_MINUTES"]
@@ -30,7 +31,7 @@ def _hash_refresh_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def create_refresh_token(user_id: int) -> str:
+def create_refresh_token(user_id: UUID) -> str:
     token = secrets.token_urlsafe(48)
     expires_at = datetime.now(timezone.utc) + timedelta(
         days=current_app.config["JWT_REFRESH_DAYS"]
