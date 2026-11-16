@@ -307,6 +307,16 @@ Pojedynczy moduł:
 .venv\Scripts\python.exe -m unittest tests.test_tickets
 ```
 
+Testy jednostkowe nie wymagają uruchomionej bazy danych:
+
+```powershell
+.venv\Scripts\python.exe -m unittest tests.test_unit
+```
+
+Plik `tests/test_unit.py` zawiera 15 izolowanych testów walidacji,
+haszowania haseł i zachowania z zamockowanymi zależnościami. Testy integracyjne
+i endpointów wymagają `TEST_DATABASE_URL`.
+
 ## Zatrzymanie
 
 Zatrzymanie kontenera:
