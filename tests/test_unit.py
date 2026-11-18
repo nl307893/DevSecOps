@@ -1,6 +1,9 @@
 import unittest
 from unittest.mock import Mock, patch
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+
+import jwt
 
 from app import create_app
 from app.api.Client.tickets import _ticket_data
@@ -112,8 +115,75 @@ class MockedDependencyUnitTestCase(unittest.TestCase):
                 "TESTING": True,
                 "INIT_DB": False,
                 "DATABASE_URL": "postgresql://unused",
+                "SECRET_KEY": "unit-test-secret",
             }
         )
+
+    def test_access_token_rejects_expired_token(self):
+        expired_token = jwt.encode(
+            {
+                "sub": str(uuid4()),
+                "role": "client",
+                "type": "access",
+                "iat": datetime.now(timezone.utc) - timedelta(minutes=30),
+                "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+            },
+            "unit-test-secret",
+            algorithm="HS256",
+        )
+
+        with self.app.test_client() as client:
+            response = client.get(
+                "/api/tickets",
+                headers={"Authorization": f"Bearer {expired_token}"},
+            )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_access_token_rejects_modified_payload(self):
+        token = jwt.encode(
+            {
+                "sub": str(uuid4()),
+                "role": "client",
+                "type": "access",
+                "iat": datetime.now(timezone.utc),
+                "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
+            },
+            "unit-test-secret",
+            algorithm="HS256",
+        )
+        header, payload, signature = token.split(".")
+        payload = payload[:-1] + ("A" if payload[-1] != "A" else "B")
+        modified_token = ".".join((header, payload, signature))
+
+        with self.app.test_client() as client:
+            response = client.get(
+                "/api/tickets",
+                headers={"Authorization": f"Bearer {modified_token}"},
+            )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_access_token_rejects_invalid_signature(self):
+        token = jwt.encode(
+            {
+                "sub": str(uuid4()),
+                "role": "client",
+                "type": "access",
+                "iat": datetime.now(timezone.utc),
+                "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
+            },
+            "wrong-unit-test-secret",
+            algorithm="HS256",
+        )
+
+        with self.app.test_client() as client:
+            response = client.get(
+                "/api/tickets",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        self.assertEqual(response.status_code, 401)
 
     def test_create_refresh_token_uses_session_and_persists_token(self):
         user_id = uuid4()

@@ -76,3 +76,24 @@ class AuthEndpointTestCase(unittest.TestCase):
             json={"email": self.email, "password": "wrong-password"},
         )
         self.assertEqual(response.status_code, 401)
+
+    def test_refresh_token_cannot_be_used_after_logout(self):
+        credentials = {"email": self.email, "password": "correct-password"}
+        register_response = self.client.post(
+            "/api/auth/register",
+            json=credentials,
+        )
+        self.assertEqual(register_response.status_code, 201)
+        refresh_token = register_response.get_json()["refresh_token"]
+
+        logout_response = self.client.post(
+            "/api/auth/logout",
+            json={"refresh_token": refresh_token},
+        )
+        self.assertEqual(logout_response.status_code, 204)
+
+        refresh_response = self.client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": refresh_token},
+        )
+        self.assertEqual(refresh_response.status_code, 401)

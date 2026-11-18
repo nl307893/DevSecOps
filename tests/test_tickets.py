@@ -91,6 +91,74 @@ class TicketEndpointTestCase(unittest.TestCase):
         response = self.client.get(f"/api/tickets/{ticket_id}", headers=headers_b)
         self.assertEqual(response.status_code, 404)
 
+    def test_client_cannot_update_another_users_ticket(self):
+        owner_headers = self._register()
+        attacker_headers = self._register()
+        create_response = self.client.post(
+            "/api/tickets",
+            json=self._payload(),
+            headers=owner_headers,
+        )
+        ticket_id = create_response.get_json()["id"]
+
+        update_response = self.client.patch(
+            f"/api/tickets/{ticket_id}",
+            json={"title": "Nieautoryzowana zmiana"},
+            headers=attacker_headers,
+        )
+
+        self.assertEqual(update_response.status_code, 404)
+
+    def test_client_cannot_delete_another_users_ticket(self):
+        owner_headers = self._register()
+        attacker_headers = self._register()
+        create_response = self.client.post(
+            "/api/tickets",
+            json=self._payload(),
+            headers=owner_headers,
+        )
+        ticket_id = create_response.get_json()["id"]
+
+        delete_response = self.client.delete(
+            f"/api/tickets/{ticket_id}",
+            headers=attacker_headers,
+        )
+
+        self.assertEqual(delete_response.status_code, 404)
+
+    def test_client_cannot_comment_on_another_users_ticket(self):
+        owner_headers = self._register()
+        attacker_headers = self._register()
+        create_response = self.client.post(
+            "/api/tickets",
+            json=self._payload(),
+            headers=owner_headers,
+        )
+        ticket_id = create_response.get_json()["id"]
+
+        comment_response = self.client.post(
+            f"/api/tickets/{ticket_id}/comments",
+            json={"content": "Nieautoryzowany komentarz"},
+            headers=attacker_headers,
+        )
+
+        self.assertEqual(comment_response.status_code, 404)
+
+    def test_client_cannot_access_technician_endpoints(self):
+        client_headers = self._register()
+
+        list_response = self.client.get(
+            "/api/technician/tickets",
+            headers=client_headers,
+        )
+        assigned_response = self.client.get(
+            "/api/technician/tickets/assigned",
+            headers=client_headers,
+        )
+
+        self.assertEqual(list_response.status_code, 404)
+        self.assertEqual(assigned_response.status_code, 404)
+
     def test_ticket_not_found(self):
         headers = self._register()
         response = self.client.get("/api/tickets/999999999", headers=headers)
