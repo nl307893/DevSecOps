@@ -294,7 +294,15 @@ automatycznie przy starcie aplikacji. Ręczne wykonanie:
 
 ## Testy
 
-Testy wymagają osobnej bazy PostgreSQL. Ustaw `TEST_DATABASE_URL`, a następnie:
+Do testów wykorzystywana jest standardowa biblioteka Pythona `unittest`.
+Testy obejmują:
+
+- walidację danych, haszowanie haseł i logikę z zamockowanymi zależnościami,
+- endpoint kontrolny, uwierzytelnianie i obsługę zgłoszeń,
+- integralność danych oraz działanie danych demonstracyjnych w PostgreSQL.
+
+Testy integracyjne wymagają osobnej bazy PostgreSQL. Ustaw `TEST_DATABASE_URL`,
+a następnie uruchom cały zestaw:
 
 ```powershell
 $env:TEST_DATABASE_URL="postgresql://devsecops:haslo-bazy@localhost:5435/devsecops_test"
@@ -313,9 +321,7 @@ Testy jednostkowe nie wymagają uruchomionej bazy danych:
 .venv\Scripts\python.exe -m unittest tests.test_unit
 ```
 
-Plik `tests/test_unit.py` zawiera 15 izolowanych testów walidacji,
-haszowania haseł i zachowania z zamockowanymi zależnościami. Testy integracyjne
-i endpointów wymagają `TEST_DATABASE_URL`.
+Testy integracyjne, bazodanowe i endpointów wymagają `TEST_DATABASE_URL`.
 
 ## Zatrzymanie
 
