@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from flask import Flask
+from flask_cors import CORS
 from dotenv import load_dotenv
 
 from .api import api_bp
@@ -17,6 +18,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         SECRET_KEY=os.getenv("SECRET_KEY", "change-me-in-development"),
         JWT_ACCESS_MINUTES=int(os.getenv("JWT_ACCESS_MINUTES", "15")),
         JWT_REFRESH_DAYS=int(os.getenv("JWT_REFRESH_DAYS", "30")),
+        CORS_ORIGINS=os.getenv("CORS_ORIGINS", "http://localhost:5173"),
         INIT_DB=True,
         DATABASE_URL=os.getenv("DATABASE_URL"),
         ALEMBIC_CONFIG=str(Path(__file__).resolve().parent.parent / "alembic.ini"),
@@ -26,5 +28,16 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     init_app(app)
     app.register_blueprint(api_bp)
+    origins = [
+        origin.strip()
+        for origin in app.config["CORS_ORIGINS"].split(",")
+        if origin.strip()
+    ]
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": origins or ["http://localhost:5173"]}},
+        methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
 
     return app
