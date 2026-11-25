@@ -1,99 +1,92 @@
-import os
-import unittest
 from uuid import uuid4
 
-from sqlalchemy import text
+import bcrypt
+import pytest
+from flask import Flask
+from flask.testing import FlaskClient
+from sqlalchemy import select
 
-from app import create_app
-from app.database import get_db
+from app.database import get_session
+from app.models import User
 
 
-class AuthEndpointTestCase(unittest.TestCase):
-    def setUp(self):
-        database_url = os.getenv("TEST_DATABASE_URL")
-        if not database_url:
-            self.skipTest("Ustaw TEST_DATABASE_URL, aby uruchomić testy PostgreSQL")
-        self.app = create_app(
-            {"TESTING": True, "DATABASE_URL": database_url}
-        )
-        self.client = self.app.test_client()
-        self.email = f"{uuid4()}@example.com"
+@pytest.mark.integration
+def test_register_user_with_valid_email_persists_hashed_password(
+    db_app: Flask, client: FlaskClient
+) -> None:
+    email = f"valid-{uuid4()}@example.com"
+    password = "correct-password"
 
-    def tearDown(self):
-        with self.app.app_context():
-            get_db().execute(
-                text("DELETE FROM users WHERE email = :email"),
-                {"email": self.email},
-            )
-            get_db().commit()
+    response = client.post(
+        "/api/auth/register",
+        json={"email": email, "password": password},
+    )
 
-    def test_register_login_refresh_and_logout(self):
-        credentials = {"email": self.email, "password": "correct-password"}
-        response = self.client.post("/api/auth/register", json=credentials)
-        self.assertEqual(response.status_code, 201)
-        tokens = response.get_json()
-        self.assertIn("access_token", tokens)
-        self.assertIn("refresh_token", tokens)
+    assert response.status_code == 201
+    tokens = response.get_json()
+    assert tokens["access_token"]
+    assert tokens["refresh_token"]
+    assert tokens["token_type"] == "Bearer"
 
-        response = self.client.post("/api/auth/login", json=credentials)
-        self.assertEqual(response.status_code, 200)
-        login_tokens = response.get_json()
+    with db_app.app_context():
+        user = get_session().scalar(select(User).where(User.email == email))
+        assert user is not None
+        assert user.password_hash != password
+        assert bcrypt.checkpw(password.encode(), user.password_hash.encode())
 
-        response = self.client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": login_tokens["refresh_token"]},
-        )
-        self.assertEqual(response.status_code, 200)
-        refreshed_tokens = response.get_json()
 
-        response = self.client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": login_tokens["refresh_token"]},
-        )
-        self.assertEqual(response.status_code, 401)
+@pytest.mark.integration
+def test_register_user_with_invalid_email_is_rejected_and_not_saved(
+    db_app: Flask, client: FlaskClient
+) -> None:
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "invalid-email", "password": "correct-password"},
+    )
 
-        response = self.client.post(
-            "/api/auth/logout",
-            json={"refresh_token": refreshed_tokens["refresh_token"]},
-        )
-        self.assertEqual(response.status_code, 204)
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "invalid email"}
 
-    def test_register_and_login_validate_credentials(self):
-        response = self.client.post(
-            "/api/auth/register",
-            json={"email": "invalid-email", "password": "correct-password"},
-        )
-        self.assertEqual(response.status_code, 400)
+    with db_app.app_context():
+        users = get_session().scalars(select(User)).all()
+        assert users == []
 
-        response = self.client.post(
-            "/api/auth/register",
-            json={"email": self.email, "password": "short"},
-        )
-        self.assertEqual(response.status_code, 400)
 
-        response = self.client.post(
-            "/api/auth/login",
-            json={"email": self.email, "password": "wrong-password"},
-        )
-        self.assertEqual(response.status_code, 401)
+@pytest.mark.integration
+def test_login_refresh_and_logout_session_lifecycle(
+    client: FlaskClient, register_user
+) -> None:
+    user = register_user()
 
-    def test_refresh_token_cannot_be_used_after_logout(self):
-        credentials = {"email": self.email, "password": "correct-password"}
-        register_response = self.client.post(
-            "/api/auth/register",
-            json=credentials,
-        )
-        self.assertEqual(register_response.status_code, 201)
-        refresh_token = register_response.get_json()["refresh_token"]
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": user["email"], "password": user["password"]},
+    )
+    assert login_response.status_code == 200
+    login_tokens = login_response.get_json()
 
-        logout_response = self.client.post(
-            "/api/auth/logout",
-            json={"refresh_token": refresh_token},
-        )
-        self.assertEqual(logout_response.status_code, 204)
+    refresh_response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": login_tokens["refresh_token"]},
+    )
+    assert refresh_response.status_code == 200
+    refreshed_tokens = refresh_response.get_json()
+    assert refreshed_tokens["refresh_token"] != login_tokens["refresh_token"]
 
-        refresh_response = self.client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": refresh_token},
-        )
-        self.assertEqual(refresh_response.status_code, 401)
+    reused_response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": login_tokens["refresh_token"]},
+    )
+    assert reused_response.status_code == 401
+
+    logout_response = client.post(
+        "/api/auth/logout",
+        json={"refresh_token": refreshed_tokens["refresh_token"]},
+    )
+    assert logout_response.status_code == 204
+
+    after_logout_response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": refreshed_tokens["refresh_token"]},
+    )
+    assert after_logout_response.status_code == 401

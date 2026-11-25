@@ -293,35 +293,61 @@ automatycznie przy starcie aplikacji. Ręczne wykonanie:
 ```
 
 ## Testy
+```
+`.venv\Scripts\python.exe -m pytest -v`  
+```
+### Wykorzystane narzędzia
 
-Do testów wykorzystywana jest standardowa biblioteka Pythona `unittest`.
-Testy obejmują:
+- `pytest` (`pyproject.toml`) — główny framework testowy i runner z obsługą markerów (`unit`, `integration`, `security`, `smoke`),
+- `testcontainers[postgres]` — automatyczne uruchamianie izolowanego kontenera PostgreSQL (`postgres:17-alpine`) dla testów integracyjnych i bezpieczeństwa wraz z migracjami Alembic oraz czyszczeniem tabel między testami,
+- `unittest.mock` — izolacja zależności (np. sesji bazy danych) w testach jednostkowych.
 
-- walidację danych, haszowanie haseł i logikę z zamockowanymi zależnościami,
-- endpoint kontrolny, uwierzytelnianie i obsługę zgłoszeń,
-- integralność danych oraz działanie danych demonstracyjnych w PostgreSQL.
+### Zakres testów
 
-Testy integracyjne wymagają osobnej bazy PostgreSQL. Ustaw `TEST_DATABASE_URL`,
-a następnie uruchom cały zestaw:
+#### 1. Test endpointu (`tests/test_health.py` — 1 test)
+- `test_health_returns_ok_without_login` — wywołuje `GET /api/health` bez logowania i sprawdza kod `200`, `Content-Type: application/json` oraz odpowiedź `{"status": "ok"}`.
+
+#### 2. Testy jednostkowe (`tests/test_unit.py` — 8 testów / 13 przypadków)
+1. `test_hash_password_can_be_verified` — sprawdza, że `hash_password` tworzy hash różny od hasła jawnego i przechodzi weryfikację przez `verify_password`.
+2. `test_verify_password_rejects_wrong_password` — sprawdza, że `verify_password` zwraca `False` dla błędnego hasła.
+3. `test_ticket_data_normalizes_valid_values` — weryfikuje przycinanie białych znaków oraz normalizację wielkości liter dla `category` i `priority` w `_ticket_data`.
+4. `test_ticket_data_rejects_invalid_input` (3 przypadki) — sprawdza odrzucenie brakujących pól wymaganych, nieprawidłowego priorytetu (`"urgent"`) oraz nieprawidłowej kategorii (`"unknown"`).
+5. `test_validate_comment_content_strips_surrounding_whitespace` — weryfikuje usunięcie skrajnych spacji z treści komentarza przez `validate_comment_content`.
+6. `test_validate_comment_content_rejects_invalid_values` (3 przypadki) — sprawdza odrzucenie wartości `None`, pustego tekstu (`"   "`) oraz komentarza dłuższego niż 5000 znaków.
+7. `test_create_refresh_token_uses_session_and_persists_token` — z zamockowaną sesją i generatorem tokenów sprawdza zapis `RefreshToken`, powiązanie z `user_id`, ustawienie `expires_at` i wywołanie `session.commit()`.
+8. `test_login_required_rejects_expired_or_invalid_signature_token` (2 przypadki) — sprawdza, że dekorator `@login_required` odrzuca wygasły token JWT oraz token z nieprawidłowym podpisem kodem `401`.
+
+#### 3. Testy integracyjne (`testcontainers` + PostgreSQL — 6 testów)
+1. `tests/test_auth.py::test_register_user_with_valid_email_persists_hashed_password` — rejestruje użytkownika (`POST /api/auth/register`), sprawdza status `201`, zwrócenie tokenów JWT oraz faktyczny zapis użytkownika w tabeli `users` z hashem `bcrypt`.
+2. `tests/test_auth.py::test_register_user_with_invalid_email_is_rejected_and_not_saved` — wysyła niepoprawny e-mail, sprawdza status `400`, błąd `"invalid email"` oraz brak rekordu w tabeli `users`.
+3. `tests/test_auth.py::test_login_refresh_and_logout_session_lifecycle` — sprawdza logowanie, rotację refresh tokena, odrzucenie powtórnie użytego starego tokena (`401`), wylogowanie (`204`) i odrzucenie odświeżania po wylogowaniu (`401`).
+4. `tests/test_tickets.py::test_client_ticket_and_comment_lifecycle` — sprawdza utworzenie zgłoszenia (`201`), odczyt (`200`), aktualizację tytułu (`200`), dodanie komentarza (`201`), obecność zmian w bazie danych oraz usunięcie zgłoszenia (`204`) z potwierdzeniem usunięcia w bazie.
+5. `tests/test_seed.py::test_seed_creates_all_entities_idempotently` — uruchamia dwukrotnie `db.seed.seed_test_data()` i sprawdza utworzenie bez duplikatów 4 użytkowników (2 klientów, 2 techników), 3 zgłoszeń, 3 komentarzy i 2 wpisów historii `TicketHistory`.
+6. `tests/test_database.py::test_database_is_created_with_related_tables` — po migracjach Alembic sprawdza w `information_schema` utworzenie tabel `users` i `tickets` oraz relację klucza obcego `tickets.client_id -> users`.
+
+#### 4. Testy bezpieczeństwa (`tests/test_security.py` — 2 scenariusze)
+1. `test_user_cannot_modify_delete_or_access_other_users_or_technician_resources` — sprawdza ochronę przed IDOR i eskalacją uprawnień: próba edycji (`PATCH`) lub usunięcia (`DELETE`) zgłoszenia innego użytkownika oraz dostęp klienta do `/api/technician/tickets` zwracają `404`, a rekord właściciela pozostaje nienaruszony w bazie.
+2. `test_password_length_policy_enforced_on_register_and_password_change` — sprawdza odrzucenie zbyt krótkiego hasła przy rejestracji (< 12 znaków, `400`) oraz przy zmianie hasła przez `PATCH /api/users/me/password` (< 8 znaków, `400`), potwierdzając że dotychczasowe hasło nadal pozwala się zalogować (`200`).
+
+### Uruchomienie testów
+
+Zainstaluj zależności testowe (jednorazowo):
 
 ```powershell
-$env:TEST_DATABASE_URL="postgresql://devsecops:haslo-bazy@localhost:5435/devsecops_test"
-.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 ```
 
-Pojedynczy moduł:
+Uruchomienie **wszystkich testów jednym poleceniem** (wymaga działającego Dockera dla kontenera PostgreSQL):
 
 ```powershell
-.venv\Scripts\python.exe -m unittest tests.test_tickets
+.venv\Scripts\python.exe -m pytest -v
 ```
 
-Testy jednostkowe nie wymagają uruchomionej bazy danych:
+Uruchomienie wyłącznie testów niewymagających Dockera (jednostkowych i smoke):
 
 ```powershell
-.venv\Scripts\python.exe -m unittest tests.test_unit
+.venv\Scripts\python.exe -m pytest -v -m "unit or smoke"
 ```
-
-Testy integracyjne, bazodanowe i endpointów wymagają `TEST_DATABASE_URL`.
 
 ## Zatrzymanie
 

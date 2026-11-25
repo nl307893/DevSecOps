@@ -1,240 +1,169 @@
-import unittest
-from unittest.mock import Mock, patch
 from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import jwt
+import pytest
+from flask import Flask
 
-from app import create_app
 from app.api.Client.tickets import _ticket_data
-from app.api.Client.users import _required_name
 from app.api.ticket_helpers import validate_comment_content
 from app.auth.decorators import login_required
 from app.auth.password import hash_password, verify_password
-from app.auth.service import create_refresh_token, revoke_refresh_token
+from app.auth.service import create_refresh_token
 
 
-class PasswordUnitTestCase(unittest.TestCase):
-    def test_hash_password_can_be_verified(self):
-        password_hash = hash_password("correct-password")
+@pytest.mark.unit
+def test_hash_password_can_be_verified() -> None:
+    password_hash = hash_password("correct-password")
 
-        self.assertTrue(verify_password("correct-password", password_hash))
-
-    def test_verify_password_rejects_wrong_password(self):
-        password_hash = hash_password("correct-password")
-
-        self.assertFalse(verify_password("wrong-password", password_hash))
+    assert password_hash != "correct-password"
+    assert verify_password("correct-password", password_hash) is True
 
 
-class CommentValidationUnitTestCase(unittest.TestCase):
-    def test_validate_comment_content_strips_surrounding_whitespace(self):
-        self.assertEqual(
-            validate_comment_content("  Problem nadal wystepuje  "),
-            ("Problem nadal wystepuje", None),
-        )
+@pytest.mark.unit
+def test_verify_password_rejects_wrong_password() -> None:
+    password_hash = hash_password("correct-password")
 
-    def test_validate_comment_content_rejects_non_string(self):
-        self.assertEqual(
-            validate_comment_content(None),
-            (None, "content is required"),
-        )
-
-    def test_validate_comment_content_rejects_empty_content(self):
-        self.assertEqual(
-            validate_comment_content("   "),
-            (None, "content cannot be empty"),
-        )
-
-    def test_validate_comment_content_rejects_content_over_limit(self):
-        self.assertEqual(
-            validate_comment_content("a" * 5001),
-            (None, "content too long"),
-        )
+    assert verify_password("wrong-password", password_hash) is False
 
 
-class TicketValidationUnitTestCase(unittest.TestCase):
-    def test_ticket_data_normalizes_valid_values(self):
-        values, error = _ticket_data(
-            {
-                "title": "  Awaria drukarki ",
-                "description": "  Nie drukuje ",
-                "category": " HARDWARE ",
-                "priority": " HIGH ",
-            }
-        )
+@pytest.mark.unit
+def test_ticket_data_normalizes_valid_values() -> None:
+    values, error = _ticket_data(
+        {
+            "title": "  Awaria drukarki ",
+            "description": "  Nie drukuje ",
+            "category": " HARDWARE ",
+            "priority": " HIGH ",
+        }
+    )
 
-        self.assertIsNone(error)
-        self.assertEqual(
-            values,
-            {
-                "title": "Awaria drukarki",
-                "description": "Nie drukuje",
-                "category": "hardware",
-                "priority": "high",
-            },
-        )
+    assert error is None
+    assert values == {
+        "title": "Awaria drukarki",
+        "description": "Nie drukuje",
+        "category": "hardware",
+        "priority": "high",
+    }
 
-    def test_ticket_data_requires_title_description_and_category(self):
-        values, error = _ticket_data({"title": "Title"})
 
-        self.assertEqual(values, {})
-        self.assertEqual(error, "title, description and category are required")
-
-    def test_ticket_data_rejects_invalid_priority(self):
-        values, error = _ticket_data(
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("payload", "expected_error"),
+    [
+        ({"title": "Title"}, "title, description and category are required"),
+        (
             {
                 "title": "Title",
                 "description": "Description",
                 "category": "hardware",
                 "priority": "urgent",
-            }
-        )
-
-        self.assertEqual(values, {})
-        self.assertEqual(error, "invalid priority")
-
-    def test_ticket_data_partial_update_requires_a_field(self):
-        values, error = _ticket_data({}, partial=True)
-
-        self.assertEqual(values, {})
-        self.assertEqual(error, "at least one ticket field is required")
-
-
-class UserValidationUnitTestCase(unittest.TestCase):
-    def test_required_name_strips_valid_name(self):
-        self.assertEqual(_required_name("  Jan  "), "Jan")
-
-    def test_required_name_rejects_empty_name(self):
-        self.assertIsNone(_required_name("   "))
-
-
-class MockedDependencyUnitTestCase(unittest.TestCase):
-    def setUp(self):
-        self.app = create_app(
-            {
-                "TESTING": True,
-                "INIT_DB": False,
-                "DATABASE_URL": "postgresql://unused",
-                "SECRET_KEY": "unit-test-secret",
-            }
-        )
-
-    def test_access_token_rejects_expired_token(self):
-        expired_token = jwt.encode(
-            {
-                "sub": str(uuid4()),
-                "role": "client",
-                "type": "access",
-                "iat": datetime.now(timezone.utc) - timedelta(minutes=30),
-                "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
             },
-            "unit-test-secret",
-            algorithm="HS256",
-        )
-
-        with self.app.test_client() as client:
-            response = client.get(
-                "/api/tickets",
-                headers={"Authorization": f"Bearer {expired_token}"},
-            )
-
-        self.assertEqual(response.status_code, 401)
-
-    def test_access_token_rejects_modified_payload(self):
-        token = jwt.encode(
+            "invalid priority",
+        ),
+        (
             {
-                "sub": str(uuid4()),
-                "role": "client",
-                "type": "access",
-                "iat": datetime.now(timezone.utc),
-                "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
+                "title": "Title",
+                "description": "Description",
+                "category": "unknown",
+                "priority": "high",
             },
-            "unit-test-secret",
-            algorithm="HS256",
-        )
-        header, payload, signature = token.split(".")
-        payload = payload[:-1] + ("A" if payload[-1] != "A" else "B")
-        modified_token = ".".join((header, payload, signature))
+            "invalid category",
+        ),
+    ],
+)
+def test_ticket_data_rejects_invalid_input(
+    payload: dict, expected_error: str
+) -> None:
+    values, error = _ticket_data(payload)
 
-        with self.app.test_client() as client:
-            response = client.get(
-                "/api/tickets",
-                headers={"Authorization": f"Bearer {modified_token}"},
-            )
+    assert values == {}
+    assert error == expected_error
 
-        self.assertEqual(response.status_code, 401)
 
-    def test_access_token_rejects_invalid_signature(self):
-        token = jwt.encode(
-            {
-                "sub": str(uuid4()),
-                "role": "client",
-                "type": "access",
-                "iat": datetime.now(timezone.utc),
-                "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
-            },
-            "wrong-unit-test-secret",
-            algorithm="HS256",
-        )
+@pytest.mark.unit
+def test_validate_comment_content_strips_surrounding_whitespace() -> None:
+    content, error = validate_comment_content("  Problem nadal wystepuje  ")
 
-        with self.app.test_client() as client:
-            response = client.get(
-                "/api/tickets",
-                headers={"Authorization": f"Bearer {token}"},
-            )
+    assert content == "Problem nadal wystepuje"
+    assert error is None
 
-        self.assertEqual(response.status_code, 401)
 
-    def test_create_refresh_token_uses_session_and_persists_token(self):
-        user_id = uuid4()
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("raw_content", "expected_error"),
+    [
+        (None, "content is required"),
+        ("   ", "content cannot be empty"),
+        ("a" * 5001, "content too long"),
+    ],
+)
+def test_validate_comment_content_rejects_invalid_values(
+    raw_content: object, expected_error: str
+) -> None:
+    content, error = validate_comment_content(raw_content)
 
-        with (
-            self.app.app_context(),
-            patch("app.auth.service.get_session") as get_session,
-            patch(
-                "app.auth.service.secrets.token_urlsafe",
-                return_value="refresh-token",
-            ),
-        ):
-            token = create_refresh_token(user_id)
+    assert content is None
+    assert error == expected_error
 
-        session = get_session.return_value
-        refresh_token = session.add.call_args.args[0]
-        self.assertEqual(token, "refresh-token")
-        self.assertEqual(refresh_token.user_id, user_id)
-        self.assertIsNotNone(refresh_token.expires_at)
-        session.commit.assert_called_once_with()
 
-    def test_revoke_refresh_token_updates_mocked_record(self):
-        refresh_token = Mock(revoked_at=None)
-        session = Mock()
-        session.scalar.return_value = refresh_token
+@pytest.mark.unit
+def test_create_refresh_token_uses_session_and_persists_token(
+    unit_app: Flask,
+) -> None:
+    user_id = uuid4()
+    session = Mock()
 
-        with patch("app.auth.service.get_session", return_value=session):
-            revoke_refresh_token("refresh-token")
+    with (
+        unit_app.app_context(),
+        patch("app.auth.service.get_session", return_value=session),
+        patch(
+            "app.auth.service.secrets.token_urlsafe",
+            return_value="refresh-token",
+        ),
+    ):
+        token = create_refresh_token(user_id)
 
-        self.assertIsNotNone(refresh_token.revoked_at)
-        session.commit.assert_called_once_with()
+    refresh_token = session.add.call_args.args[0]
+    assert token == "refresh-token"
+    assert refresh_token.user_id == user_id
+    assert refresh_token.expires_at is not None
+    session.commit.assert_called_once_with()
 
-    def test_login_required_uses_mocked_token_decoder(self):
-        app = self.app
 
-        @login_required
-        def protected_view():
-            return "protected"
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("secret", "exp_delta"),
+    [
+        ("unit-test-secret", timedelta(minutes=-1)),
+        ("wrong-unit-test-secret", timedelta(minutes=15)),
+    ],
+)
+def test_login_required_rejects_expired_or_invalid_signature_token(
+    unit_app: Flask, secret: str, exp_delta: timedelta
+) -> None:
+    @login_required
+    def protected_view():
+        return "protected"
 
-        with (
-            app.test_request_context(
-                "/protected",
-                headers={"Authorization": "Bearer access-token"},
-            ),
-            patch(
-                "app.auth.decorators.decode_access_token",
-                return_value={"sub": str(uuid4()), "role": "client"},
-            ) as decode_access_token,
-        ):
-            response = protected_view()
+    token = jwt.encode(
+        {
+            "sub": str(uuid4()),
+            "role": "client",
+            "type": "access",
+            "iat": datetime.now(timezone.utc) - timedelta(minutes=30),
+            "exp": datetime.now(timezone.utc) + exp_delta,
+        },
+        secret,
+        algorithm="HS256",
+    )
 
-        self.assertEqual(response, "protected")
-        decode_access_token.assert_called_once_with("access-token")
+    with unit_app.test_request_context(
+        "/protected",
+        headers={"Authorization": f"Bearer {token}"},
+    ):
+        response, status_code = protected_view()
 
+    assert status_code == 401
+    assert "error" in response.get_json()

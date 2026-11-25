@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "unit: Unit tests without external dependencies",
+    "integration: Integration tests running against PostgreSQL testcontainer",
+    "security: Security and authorization tests",
+    "smoke: Smoke tests for running application endpoints",
+]

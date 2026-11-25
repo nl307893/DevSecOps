@@ -1,62 +1,43 @@
-import os
-import unittest
 from uuid import uuid4
 
-from sqlalchemy import select, text
+import pytest
+from flask import Flask
+from sqlalchemy import select
 
-from app import create_app
-from app.database import get_db
-from app.models import User, UserRole
-from db.seed import seed_demo_users
+from app.database import get_session
+from app.models import Comment, Ticket, TicketHistory, User, UserRole
+from db.seed import seed_test_data
 
 
-class SeedTestCase(unittest.TestCase):
-    def setUp(self):
-        database_url = os.getenv("TEST_DATABASE_URL")
-        if not database_url:
-            self.skipTest("Ustaw TEST_DATABASE_URL, aby uruchomić testy PostgreSQL")
-        self.app = create_app(
-            {"TESTING": True, "DATABASE_URL": database_url}
+@pytest.mark.integration
+def test_seed_creates_all_entities_idempotently(db_app: Flask) -> None:
+    suffix = uuid4()
+    client_email = f"seed-client-{suffix}@example.com"
+    technician_email = f"seed-technician-{suffix}@example.com"
+
+    with db_app.app_context():
+        seed_test_data(
+            client_email=client_email,
+            client_password="client-password",
+            technician_email=technician_email,
+            technician_password="technician-password",
         )
-        suffix = uuid4()
-        self.client_email = f"seed-client-{suffix}@example.com"
-        self.technician_email = f"seed-technician-{suffix}@example.com"
-
-    def tearDown(self):
-        with self.app.app_context():
-            get_db().execute(
-                text("DELETE FROM users WHERE email IN (:client, :technician)"),
-                {
-                    "client": self.client_email,
-                    "technician": self.technician_email,
-                },
-            )
-            get_db().commit()
-
-    def test_seed_creates_client_and_technician_idempotently(self):
-        with self.app.app_context():
-            seed_demo_users(
-                self.client_email,
-                "client-password",
-                self.technician_email,
-                "technician-password",
-            )
-            seed_demo_users(
-                self.client_email,
-                "client-password",
-                self.technician_email,
-                "technician-password",
-            )
-            users = get_db().scalars(
-                select(User).where(
-                    User.email.in_(
-                        [self.client_email, self.technician_email]
-                    )
-                )
-            ).all()
-
-        self.assertEqual(len(users), 2)
-        self.assertEqual(
-            {user.role for user in users},
-            {UserRole.CLIENT, UserRole.TECHNICIAN},
+        seed_test_data(
+            client_email=client_email,
+            client_password="client-password",
+            technician_email=technician_email,
+            technician_password="technician-password",
         )
+
+        session = get_session()
+        users = session.scalars(select(User)).all()
+        tickets = session.scalars(select(Ticket)).all()
+        comments = session.scalars(select(Comment)).all()
+        history = session.scalars(select(TicketHistory)).all()
+
+    assert len(users) == 4
+    assert sum(1 for user in users if user.role == UserRole.CLIENT) == 2
+    assert sum(1 for user in users if user.role == UserRole.TECHNICIAN) == 2
+    assert len(tickets) == 3
+    assert len(comments) == 3
+    assert len(history) == 2

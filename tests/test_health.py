@@ -1,17 +1,11 @@
-import unittest
+import pytest
+from flask.testing import FlaskClient
 
-from app import create_app
 
+@pytest.mark.smoke
+def test_health_returns_ok_without_login(unit_client: FlaskClient) -> None:
+    response = unit_client.get("/api/health")
 
-class HealthEndpointTestCase(unittest.TestCase):
-    def setUp(self):
-        self.client = create_app(
-            {"TESTING": True, "INIT_DB": False}
-        ).test_client()
-
-    def test_health_returns_application_status_without_login(self):
-        response = self.client.get("/api/health")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json(), {"status": "ok"})
-        self.assertEqual(response.content_type, "application/json")
+    assert response.status_code == 200
+    assert response.content_type == "application/json"
+    assert response.get_json() == {"status": "ok"}
